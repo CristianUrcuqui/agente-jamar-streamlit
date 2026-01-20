@@ -224,9 +224,9 @@ def get_mcp_client(region: str):
                 )
             )
             
-            # NO inicializar aquí - se inicializará cuando se use dentro del contexto
+            # Guardar cliente para usar cuando se ejecute el agente
             st.session_state.mcp_client = mcp_client
-            print(f"✅ MCPClient creado (se inicializará cuando se use)")
+            print(f"✅ MCPClient creado (se inicializará cuando se ejecute el agente)")
             
         except Exception as e:
             print(f"⚠️ Error creando MCPClient: {e}")
@@ -478,9 +478,16 @@ def main():
                     agent.callback_handler = capture
                     
                     # Capturar stdout mientras se ejecuta el agente
-                    # El MCPClient ya está inicializado y abierto, solo ejecutar el agente
+                    # IMPORTANTE: El MCPClient debe estar dentro del contexto cuando se ejecutan las tools
+                    mcp_client = st.session_state.get("mcp_client")
                     with redirect_stdout(captured_output):
-                        response = agent(prompt)
+                        if mcp_client:
+                            # Ejecutar dentro del contexto del MCPClient para que las tools funcionen
+                            with mcp_client:
+                                response = agent(prompt)
+                        else:
+                            # Si no hay cliente, ejecutar normalmente (no debería pasar)
+                            response = agent(prompt)
                     
                     # Obtener el output capturado
                     stdout_text = captured_output.getvalue()

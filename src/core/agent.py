@@ -80,14 +80,14 @@ def create_agent(memory_id: str, region: str, actor_id: str = "customer_001", us
         try:
             # Si ya se proporcionó un cliente, usarlo
             if mcp_client is not None:
-                # Inicializar el cliente y obtener las tools
-                # El cliente debe mantenerse abierto para que las tools funcionen
-                mcp_client.start()
-                gateway_tools = mcp_client.list_tools_sync()
-                tools_list.extend(gateway_tools)
-                print(f"✅ Gateway conectado exitosamente!")
-                print(f"   Tools disponibles: {len(gateway_tools)}")
-                # NOTA: El cliente se mantiene abierto - NO se cierra aquí
+                # Obtener las tools dentro del contexto (el cliente se inicializará automáticamente)
+                # NOTA: El cliente se cerrará después, pero se volverá a abrir cuando se ejecute el agente
+                with mcp_client:
+                    gateway_tools = mcp_client.list_tools_sync()
+                    tools_list.extend(gateway_tools)
+                    print(f"✅ Gateway conectado exitosamente!")
+                    print(f"   Tools disponibles: {len(gateway_tools)}")
+                # NOTA: El cliente se cerrará aquí, pero se volverá a abrir cuando se ejecute el agente dentro del contexto
             else:
                 # Crear nuevo cliente
                 from strands.tools.mcp import MCPClient
@@ -125,15 +125,15 @@ def create_agent(memory_id: str, region: str, actor_id: str = "customer_001", us
                     )
                 )
                 
-                # Inicializar el cliente y obtener las tools
-                # El cliente debe mantenerse abierto para que las tools funcionen
-                created_mcp_client.start()
-                gateway_tools = created_mcp_client.list_tools_sync()
-                tools_list.extend(gateway_tools)
-                print(f"✅ Gateway conectado exitosamente!")
-                print(f"   URL: {gateway_url}")
-                print(f"   Tools disponibles: {len(gateway_tools)}")
-                # NOTA: El cliente se mantiene abierto - NO se cierra aquí
+                # Obtener tools dentro del contexto (el cliente se inicializará automáticamente)
+                # NOTA: El cliente se cerrará después, pero se volverá a abrir cuando se ejecute el agente
+                with created_mcp_client:
+                    gateway_tools = created_mcp_client.list_tools_sync()
+                    tools_list.extend(gateway_tools)
+                    print(f"✅ Gateway conectado exitosamente!")
+                    print(f"   URL: {gateway_url}")
+                    print(f"   Tools disponibles: {len(gateway_tools)}")
+                # NOTA: El cliente se cerrará aquí, pero se volverá a abrir cuando se ejecute el agente dentro del contexto
         
         except Exception as e:
             print(f"⚠️ Error integrando Gateway: {e}")
