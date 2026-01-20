@@ -491,31 +491,55 @@ def main():
                                 print(f"🔧 Iniciando ejecución del agente...")
                                 print(f"   MCPClient disponible: {mcp_client is not None}")
                                 
+                                # Verificar tools usando función del módulo agent
+                                from src.core.agent import get_tool_name
+                                
+                                tools_in_agent = None
                                 if hasattr(agent, 'tools'):
-                                    print(f"   Tools en agente: {len(agent.tools)}")
-                                    tool_names = [getattr(t, 'name', str(t))[:30] for t in agent.tools[:10]]
+                                    tools_in_agent = agent.tools
+                                elif hasattr(agent, '_tools'):
+                                    tools_in_agent = agent._tools
+                                
+                                if tools_in_agent:
+                                    print(f"   Tools en agente: {len(tools_in_agent)}")
+                                    tool_names = []
+                                    for t in tools_in_agent[:10]:
+                                        name = get_tool_name(t) or "Unknown"
+                                        tool_names.append(name[:30])
                                     print(f"   Primeras 10 tools: {tool_names}")
+                                    
+                                    # Verificar buscar_productos
+                                    buscar_productos_found = False
+                                    for t in tools_in_agent:
+                                        name = get_tool_name(t)
+                                        if name and name.lower() == 'buscar_productos':
+                                            buscar_productos_found = True
+                                            break
+                                    if buscar_productos_found:
+                                        print(f"   ✅ Tool 'buscar_productos' DISPONIBLE")
+                                    else:
+                                        print(f"   ❌ Tool 'buscar_productos' NO DISPONIBLE")
                                 else:
-                                    print(f"   ⚠️ Agente no tiene atributo 'tools'")
+                                    print(f"   ⚠️ Agente no tiene tools accesibles")
                                 
                                 with mcp_client:
                                     print(f"🔧 MCPClient activado, ejecutando agente...")
                                     response = agent(prompt)
                                     print(f"✅ Agente ejecutado exitosamente")
                         except Exception as e:
-                            # Capturar error específico para debugging
+                            # NO ocultar errores - mostrar el error real para debugging
                             error_msg = str(e)
                             error_type = type(e).__name__
                             import traceback
                             error_trace = traceback.format_exc()
                             
-                            print(f"❌ Error ejecutando agente:")
+                            print(f"❌ ERROR EJECUTANDO AGENTE:")
                             print(f"   Tipo: {error_type}")
                             print(f"   Mensaje: {error_msg}")
-                            print(f"   Traceback completo:")
+                            print(f"   Traceback:")
                             print(error_trace)
                             
-                            # Guardar error para debugging (siempre mostrar)
+                            # Guardar error
                             st.session_state.last_error = {
                                 "error": error_msg,
                                 "error_type": error_type,
@@ -523,15 +547,15 @@ def main():
                                 "prompt": prompt
                             }
                             
-                            # Mostrar error al usuario de forma amigable
-                            response_text = f"Disculpa, estoy teniendo un inconveniente técnico al procesar tu solicitud. 😅\n\nPor favor intenta de nuevo o contacta con un asesor."
+                            # MOSTRAR EL ERROR REAL al usuario para debugging
+                            response_text = f"❌ Error: {error_type}\n\n{error_msg}\n\nPor favor revisa los logs o contacta con un asesor."
                             
-                            # Mostrar detalles técnicos en expander (siempre visible para debugging)
+                            # Mostrar error de forma visible
                             st.error(f"❌ Error: {error_type}")
-                            with st.expander("🔍 Detalles técnicos del error"):
-                                st.code(f"Tipo: {error_type}\n\nMensaje: {error_msg}\n\nTraceback:\n{error_trace}")
+                            st.error(f"**Mensaje:** {error_msg}")
+                            with st.expander("🔍 Traceback completo"):
+                                st.code(error_trace)
                             
-                            # No continuar procesando la respuesta si hay error
                             st.session_state.messages.append({"role": "assistant", "content": response_text})
                             st.rerun()
                             return
@@ -540,9 +564,19 @@ def main():
                     stdout_text = captured_output.getvalue()
                     
                     # Debug: Mostrar información sobre tools disponibles
+                    from src.core.agent import get_tool_name
+                    tools_in_agent = None
                     if hasattr(agent, 'tools'):
-                        print(f"📋 Tools disponibles en agente: {len(agent.tools)}")
-                        tool_names = [getattr(t, 'name', str(t)) for t in agent.tools[:5]]
+                        tools_in_agent = agent.tools
+                    elif hasattr(agent, '_tools'):
+                        tools_in_agent = agent._tools
+                    
+                    if tools_in_agent:
+                        print(f"📋 Tools disponibles en agente después de ejecutar: {len(tools_in_agent)}")
+                        tool_names = []
+                        for t in tools_in_agent[:5]:
+                            name = get_tool_name(t) or "Unknown"
+                            tool_names.append(name)
                         print(f"   Primeras tools: {tool_names}")
                     
                     # Intentar obtener texto de la respuesta
