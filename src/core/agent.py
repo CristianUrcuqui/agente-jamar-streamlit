@@ -191,18 +191,41 @@ def create_agent(memory_id: str, region: str, actor_id: str = "customer_001", us
     if tools_list:
         tool_names_preview = [getattr(t, 'name', str(t))[:40] for t in tools_list[:10]]
         print(f"   Preview de tools: {tool_names_preview}")
+        # Verificar que hay tools importantes
+        tool_names_lower = [getattr(t, 'name', str(t)).lower() for t in tools_list]
+        if 'buscar_productos' in tool_names_lower:
+            print(f"   ✅ Tool 'buscar_productos' encontrada")
+        else:
+            print(f"   ⚠️ Tool 'buscar_productos' NO encontrada en la lista")
+    else:
+        print(f"   ❌ ERROR: No hay tools disponibles!")
     
     # Crear agente con tools del Gateway
-    agente_ventas = Agent(
-        model=model,
-        session_manager=session_manager,
-        tools=tools_list,
-        system_prompt=SYSTEM_PROMPT,
-    )
+    print(f"🔧 Creando agente con {len(tools_list)} tools...")
+    try:
+        agente_ventas = Agent(
+            model=model,
+            session_manager=session_manager,
+            tools=tools_list,
+            system_prompt=SYSTEM_PROMPT,
+        )
+        print(f"✅ Agente creado exitosamente")
+    except Exception as e:
+        print(f"❌ Error creando agente: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
     
     # Verificar que el agente tiene las tools
     if hasattr(agente_ventas, 'tools'):
-        print(f"✅ Agente creado con {len(agente_ventas.tools)} tools registradas")
+        print(f"✅ Agente tiene {len(agente_ventas.tools)} tools registradas")
+        # Verificar nuevamente que buscar_productos está disponible
+        agent_tool_names = [getattr(t, 'name', str(t)).lower() for t in agente_ventas.tools]
+        if 'buscar_productos' in agent_tool_names:
+            print(f"   ✅ Tool 'buscar_productos' está disponible en el agente")
+        else:
+            print(f"   ⚠️ Tool 'buscar_productos' NO está disponible en el agente")
+            print(f"   Tools disponibles: {[getattr(t, 'name', str(t)) for t in agente_ventas.tools[:10]]}")
     else:
         print("⚠️ Advertencia: No se pudo verificar tools en el agente")
     

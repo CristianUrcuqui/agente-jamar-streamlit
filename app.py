@@ -488,30 +488,48 @@ def main():
                         try:
                             with redirect_stdout(captured_output):
                                 # Ejecutar dentro del contexto del MCPClient para que las tools funcionen
+                                print(f"🔧 Iniciando ejecución del agente...")
+                                print(f"   MCPClient disponible: {mcp_client is not None}")
+                                
+                                if hasattr(agent, 'tools'):
+                                    print(f"   Tools en agente: {len(agent.tools)}")
+                                    tool_names = [getattr(t, 'name', str(t))[:30] for t in agent.tools[:10]]
+                                    print(f"   Primeras 10 tools: {tool_names}")
+                                else:
+                                    print(f"   ⚠️ Agente no tiene atributo 'tools'")
+                                
                                 with mcp_client:
-                                    print(f"🔧 Ejecutando agente con {len(agent.tools) if hasattr(agent, 'tools') else 'N/A'} tools disponibles")
+                                    print(f"🔧 MCPClient activado, ejecutando agente...")
                                     response = agent(prompt)
+                                    print(f"✅ Agente ejecutado exitosamente")
                         except Exception as e:
                             # Capturar error específico para debugging
                             error_msg = str(e)
+                            error_type = type(e).__name__
                             import traceback
                             error_trace = traceback.format_exc()
-                            print(f"❌ Error ejecutando agente: {error_msg}")
-                            print(f"Traceback: {error_trace}")
                             
-                            # Mostrar error al usuario de forma amigable
-                            response_text = f"Disculpa, estoy teniendo un inconveniente técnico al procesar tu solicitud. 😅\n\nError: {error_msg}\n\nPor favor intenta de nuevo o contacta con un asesor."
+                            print(f"❌ Error ejecutando agente:")
+                            print(f"   Tipo: {error_type}")
+                            print(f"   Mensaje: {error_msg}")
+                            print(f"   Traceback completo:")
+                            print(error_trace)
                             
-                            # Guardar error para debugging
+                            # Guardar error para debugging (siempre mostrar)
                             st.session_state.last_error = {
                                 "error": error_msg,
+                                "error_type": error_type,
                                 "traceback": error_trace,
                                 "prompt": prompt
                             }
                             
-                            # Mostrar detalles técnicos en expander
+                            # Mostrar error al usuario de forma amigable
+                            response_text = f"Disculpa, estoy teniendo un inconveniente técnico al procesar tu solicitud. 😅\n\nPor favor intenta de nuevo o contacta con un asesor."
+                            
+                            # Mostrar detalles técnicos en expander (siempre visible para debugging)
+                            st.error(f"❌ Error: {error_type}")
                             with st.expander("🔍 Detalles técnicos del error"):
-                                st.code(error_trace)
+                                st.code(f"Tipo: {error_type}\n\nMensaje: {error_msg}\n\nTraceback:\n{error_trace}")
                             
                             # No continuar procesando la respuesta si hay error
                             st.session_state.messages.append({"role": "assistant", "content": response_text})
