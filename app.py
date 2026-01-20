@@ -35,10 +35,67 @@ st.markdown("""
 # IDENTIFICACIÓN DE USUARIO
 # ============================================================================
 
+def get_client_ip() -> str:
+    """Obtiene la IP del cliente desde los headers de Streamlit."""
+    try:
+        # Streamlit expone la IP en los headers de la request
+        import hashlib
+        
+        # Intentar obtener IP de diferentes formas
+        ip = None
+        
+        # Método 1: Desde headers HTTP (si están disponibles)
+        try:
+            # En Streamlit Cloud, la IP puede estar en diferentes headers
+            headers = st.runtime.scriptrunner.get_script_run_ctx().get("headers", {})
+            if headers:
+                # Probar diferentes headers comunes
+                ip = headers.get("X-Forwarded-For", "").split(",")[0].strip()
+                if not ip:
+                    ip = headers.get("X-Real-Ip", "")
+                if not ip:
+                    ip = headers.get("Remote-Addr", "")
+        except:
+            pass
+        
+        # Método 2: Usar session_id de Streamlit como identificador único por sesión
+        # Esto es más confiable que IP porque funciona incluso detrás de proxies
+        if not ip:
+            session_id = st.runtime.scriptrunner.get_script_run_ctx().session_id
+            if session_id:
+                # Usar hash del session_id para crear un ID consistente
+                ip_hash = hashlib.md5(session_id.encode()).hexdigest()[:12]
+                return f"ip_{ip_hash}"
+        
+        # Si tenemos IP, crear hash consistente
+        if ip:
+            ip_hash = hashlib.md5(ip.encode()).hexdigest()[:12]
+            return f"ip_{ip_hash}"
+        
+        # Fallback: usar UUID pero basado en session_id si está disponible
+        session_id = st.runtime.scriptrunner.get_script_run_ctx().session_id
+        if session_id:
+            ip_hash = hashlib.md5(session_id.encode()).hexdigest()[:12]
+            return f"ip_{ip_hash}"
+        
+        # Último recurso: UUID normal
+        return f"st_{uuid.uuid4().hex[:8]}"
+        
+    except Exception as e:
+        # Si falla todo, usar UUID normal
+        print(f"⚠️ No se pudo obtener IP: {e}")
+        return f"st_{uuid.uuid4().hex[:8]}"
+
+
 def get_actor_id() -> str:
-    """Genera ID único para el usuario."""
+    """
+    Genera ID único para el usuario basado en su IP/dispositivo.
+    El mismo dispositivo tendrá el mismo actor_id en diferentes sesiones.
+    """
     if "actor_id" not in st.session_state:
-        st.session_state.actor_id = f"st_{uuid.uuid4().hex[:8]}"
+        # Obtener ID basado en IP/dispositivo
+        st.session_state.actor_id = get_client_ip()
+        print(f"👤 Actor ID generado: {st.session_state.actor_id}")
     return st.session_state.actor_id
 
 
