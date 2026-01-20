@@ -1,0 +1,46 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Environment
+.env
+.env.local
+
+# Documentation
+*.md
+!README.md
+
+# Tests
+tests/
+test_*.py
+
+# Gateway (no necesario en el contenedor)
+gateway/deploy.sh
+gateway/setup_gateway.py
+
+# Otros
+*.zip
+*.tar.gz

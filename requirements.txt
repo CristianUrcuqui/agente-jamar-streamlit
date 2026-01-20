@@ -1,0 +1,25 @@
+strands-agents==1.22.0
+strands-agents-tools
+
+# AWS
+boto3>=1.42.3
+botocore>=1.42.3
+
+# AgentCore
+bedrock-agentcore==1.1.1
+bedrock-agentcore-starter-toolkit==0.2.3
+
+# Telemetría
+aws-opentelemetry-distro==0.14.0
+
+# Búsqueda web
+ddgs
+
+# Utilidades
+pyyaml
+requests
+python-dotenv>=1.0.0
+beautifulsoup4>=4.12.0
+
+# Frontend POC
+streamlit>=1.31.0
