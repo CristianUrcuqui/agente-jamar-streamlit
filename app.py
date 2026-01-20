@@ -67,9 +67,8 @@ def get_device_id() -> str:
         
         return f"device_{device_hash}"
         
-    except Exception as e:
+    except Exception:
         # Si falla, usar UUID normal
-        print(f"⚠️ No se pudo obtener device ID: {e}")
         return f"st_{uuid.uuid4().hex[:8]}"
 
 
@@ -78,32 +77,45 @@ def get_actor_id() -> str:
     Obtiene o genera un actor_id persistente para el usuario.
     
     El mismo dispositivo/navegador mantendrá el mismo actor_id entre:
-    - Recargas de página ✅
-    - Cerrar y reabrir navegador ✅ (usando query_params en URL)
-    - Reinicios de Streamlit ✅
+    - Recargas de página ✅ (usa session_state + query_params)
+    - Cerrar y reabrir navegador ✅ (usa query_params en URL)
+    - Reinicios de Streamlit ✅ (usa session_id de Streamlit como base)
     
     Esto permite mantener el contexto y memoria de conversaciones.
     """
-    # Primero intentar obtener de query_params (persiste en la URL)
+    # 1. Primero intentar obtener de query_params (persiste en la URL)
     query_params = st.query_params
     if "actor_id" in query_params:
         actor_id = query_params["actor_id"]
         st.session_state.actor_id = actor_id
         return actor_id
     
-    # Si no está en query_params, verificar session_state
+    # 2. Si no está en query_params, verificar session_state (persiste durante la sesión del navegador)
     if "actor_id" in st.session_state:
         actor_id = st.session_state.actor_id
         # Guardar en query_params para persistencia
         st.query_params["actor_id"] = actor_id
         return actor_id
     
-    # Si no existe, generar uno nuevo
-    actor_id = f"device_{uuid.uuid4().hex[:12]}"
+    # 3. Si no existe, generar uno basado en session_id de Streamlit (más consistente)
+    # Esto hace que el mismo navegador siempre tenga el mismo ID
+    try:
+        import hashlib
+        ctx = st.runtime.scriptrunner.get_script_run_ctx()
+        if ctx and ctx.session_id:
+            # Crear hash del session_id de Streamlit (es único por navegador/sesión)
+            session_hash = hashlib.md5(ctx.session_id.encode()).hexdigest()[:12]
+            actor_id = f"device_{session_hash}"
+        else:
+            # Fallback a UUID si no hay session_id
+            actor_id = f"device_{uuid.uuid4().hex[:12]}"
+    except Exception:
+        # Fallback final
+        actor_id = f"device_{uuid.uuid4().hex[:12]}"
+    
+    # Guardar en ambos lugares para máxima persistencia
     st.session_state.actor_id = actor_id
-    # Guardar en query_params para persistencia entre sesiones
     st.query_params["actor_id"] = actor_id
-    print(f"👤 Nuevo Actor ID generado: {actor_id}")
     
     return actor_id
 
@@ -226,12 +238,8 @@ def get_mcp_client(region: str):
             
             # Guardar cliente para usar cuando se ejecute el agente
             st.session_state.mcp_client = mcp_client
-            print(f"✅ MCPClient creado (se inicializará cuando se ejecute el agente)")
             
         except Exception as e:
-            print(f"⚠️ Error creando MCPClient: {e}")
-            import traceback
-            traceback.print_exc()
             st.session_state.mcp_client = None
     
     return st.session_state.get("mcp_client")
@@ -261,9 +269,7 @@ def run_agent_with_gateway(prompt: str, actor_id: str):
         )
         
         # Ejecutar el agente dentro del mismo contexto
-        print(f"🔧 Ejecutando agente con prompt: {prompt[:50]}...")
         response = agent(prompt)
-        print(f"✅ Agente ejecutado exitosamente")
         
         return response, session_id
 
