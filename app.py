@@ -412,17 +412,9 @@ def main():
                     agent.callback_handler = capture
                     
                     # Capturar stdout mientras se ejecuta el agente
-                    # Asegurar que el MCPClient esté dentro del contexto cuando se ejecutan las tools
-                    mcp_client = st.session_state.get("mcp_client")
-                    if mcp_client:
-                        # Si hay MCPClient, ejecutar dentro de su contexto
-                        with redirect_stdout(captured_output):
-                            with mcp_client:
-                                response = agent(prompt)
-                    else:
-                        # Si no hay MCPClient, ejecutar normalmente
-                        with redirect_stdout(captured_output):
-                            response = agent(prompt)
+                    # El MCPClient ya está inicializado y abierto, solo ejecutar el agente
+                    with redirect_stdout(captured_output):
+                        response = agent(prompt)
                     
                     # Obtener el output capturado
                     stdout_text = captured_output.getvalue()
