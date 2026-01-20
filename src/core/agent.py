@@ -87,6 +87,10 @@ def create_agent(memory_id: str, region: str, actor_id: str = "customer_001", us
                     tools_list.extend(gateway_tools)
                     print(f"✅ Gateway conectado exitosamente!")
                     print(f"   Tools disponibles: {len(gateway_tools)}")
+                    # Debug: Mostrar nombres de algunas tools
+                    if gateway_tools:
+                        tool_names = [getattr(t, 'name', str(t))[:50] for t in gateway_tools[:5]]
+                        print(f"   Primeras tools: {tool_names}")
                 # NOTA: El cliente se cerrará aquí, pero se volverá a abrir cuando se ejecute el agente dentro del contexto
             else:
                 # Crear nuevo cliente
@@ -133,6 +137,10 @@ def create_agent(memory_id: str, region: str, actor_id: str = "customer_001", us
                     print(f"✅ Gateway conectado exitosamente!")
                     print(f"   URL: {gateway_url}")
                     print(f"   Tools disponibles: {len(gateway_tools)}")
+                    # Debug: Mostrar nombres de algunas tools
+                    if gateway_tools:
+                        tool_names = [getattr(t, 'name', str(t))[:50] for t in gateway_tools[:5]]
+                        print(f"   Primeras tools: {tool_names}")
                 # NOTA: El cliente se cerrará aquí, pero se volverá a abrir cuando se ejecute el agente dentro del contexto
         
         except Exception as e:
@@ -144,6 +152,12 @@ def create_agent(memory_id: str, region: str, actor_id: str = "customer_001", us
     if not tools_list:
         raise RuntimeError("No hay tools disponibles. El Gateway debe estar configurado correctamente.")
     
+    # Debug: Verificar tools antes de crear agente
+    print(f"📦 Total de tools que se pasarán al agente: {len(tools_list)}")
+    if tools_list:
+        tool_names_preview = [getattr(t, 'name', str(t))[:40] for t in tools_list[:10]]
+        print(f"   Preview de tools: {tool_names_preview}")
+    
     # Crear agente con tools del Gateway
     agente_ventas = Agent(
         model=model,
@@ -151,6 +165,12 @@ def create_agent(memory_id: str, region: str, actor_id: str = "customer_001", us
         tools=tools_list,
         system_prompt=SYSTEM_PROMPT,
     )
+    
+    # Verificar que el agente tiene las tools
+    if hasattr(agente_ventas, 'tools'):
+        print(f"✅ Agente creado con {len(agente_ventas.tools)} tools registradas")
+    else:
+        print("⚠️ Advertencia: No se pudo verificar tools en el agente")
     
     # Retornar el cliente usado (el proporcionado o el creado)
     return_mcp_client = mcp_client if mcp_client is not None else created_mcp_client
