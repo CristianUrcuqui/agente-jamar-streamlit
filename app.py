@@ -480,17 +480,52 @@ def main():
                     # Capturar stdout mientras se ejecuta el agente
                     # IMPORTANTE: El MCPClient debe estar dentro del contexto cuando se ejecutan las tools
                     mcp_client = st.session_state.get("mcp_client")
-                    with redirect_stdout(captured_output):
-                        if mcp_client:
-                            # Ejecutar dentro del contexto del MCPClient para que las tools funcionen
-                            with mcp_client:
-                                response = agent(prompt)
-                        else:
-                            # Si no hay cliente, ejecutar normalmente (no debería pasar)
-                            response = agent(prompt)
+                    
+                    if not mcp_client:
+                        st.error("❌ Error: MCPClient no está disponible. No se pueden usar las tools del Gateway.")
+                        response_text = "Lo siento, hay un problema de conexión con el Gateway. Por favor recarga la página."
+                    else:
+                        try:
+                            with redirect_stdout(captured_output):
+                                # Ejecutar dentro del contexto del MCPClient para que las tools funcionen
+                                with mcp_client:
+                                    print(f"🔧 Ejecutando agente con {len(agent.tools) if hasattr(agent, 'tools') else 'N/A'} tools disponibles")
+                                    response = agent(prompt)
+                        except Exception as e:
+                            # Capturar error específico para debugging
+                            error_msg = str(e)
+                            import traceback
+                            error_trace = traceback.format_exc()
+                            print(f"❌ Error ejecutando agente: {error_msg}")
+                            print(f"Traceback: {error_trace}")
+                            
+                            # Mostrar error al usuario de forma amigable
+                            response_text = f"Disculpa, estoy teniendo un inconveniente técnico al procesar tu solicitud. 😅\n\nError: {error_msg}\n\nPor favor intenta de nuevo o contacta con un asesor."
+                            
+                            # Guardar error para debugging
+                            st.session_state.last_error = {
+                                "error": error_msg,
+                                "traceback": error_trace,
+                                "prompt": prompt
+                            }
+                            
+                            # Mostrar detalles técnicos en expander
+                            with st.expander("🔍 Detalles técnicos del error"):
+                                st.code(error_trace)
+                            
+                            # No continuar procesando la respuesta si hay error
+                            st.session_state.messages.append({"role": "assistant", "content": response_text})
+                            st.rerun()
+                            return
                     
                     # Obtener el output capturado
                     stdout_text = captured_output.getvalue()
+                    
+                    # Debug: Mostrar información sobre tools disponibles
+                    if hasattr(agent, 'tools'):
+                        print(f"📋 Tools disponibles en agente: {len(agent.tools)}")
+                        tool_names = [getattr(t, 'name', str(t)) for t in agent.tools[:5]]
+                        print(f"   Primeras tools: {tool_names}")
                     
                     # Intentar obtener texto de la respuesta
                     response_text = get_response_text(response)
