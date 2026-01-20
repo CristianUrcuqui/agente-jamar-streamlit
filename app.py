@@ -259,13 +259,25 @@ def run_agent_with_gateway(prompt: str, actor_id: str):
     if not mcp_client:
         raise RuntimeError("MCPClient no disponible")
     
+    # Obtener o crear session_id persistente (para mantener contexto)
+    # IMPORTANTE: El session_id debe ser el mismo durante toda la conversación
+    if "session_id" not in st.session_state:
+        import uuid
+        st.session_state.session_id = str(uuid.uuid4())
+    
+    session_id = st.session_state.session_id
+    
+    # Debug: Verificar que el session_id persiste
+    # print(f"🔍 Session ID: {session_id[:8]}... (persistente: {session_id in st.session_state})")
+    
     # Crear y ejecutar agente dentro del mismo contexto
     with mcp_client:
-        agent, session_id = create_agent_in_context(
+        agent, _ = create_agent_in_context(
             memory_id=memory["id"],
             region=region,
             actor_id=actor_id,
-            mcp_client=mcp_client
+            mcp_client=mcp_client,
+            session_id=session_id  # Usar session_id persistente
         )
         
         # Ejecutar el agente dentro del mismo contexto

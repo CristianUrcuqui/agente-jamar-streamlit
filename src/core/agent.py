@@ -54,7 +54,7 @@ def get_tool_name(tool):
     return None
 
 
-def create_agent_in_context(memory_id: str, region: str, actor_id: str, mcp_client):
+def create_agent_in_context(memory_id: str, region: str, actor_id: str, mcp_client, session_id: str = None):
     """
     Crea el agente DENTRO de un contexto MCPClient activo.
     IMPORTANTE: Esta función DEBE llamarse dentro de un bloque 'with mcp_client:'
@@ -64,19 +64,23 @@ def create_agent_in_context(memory_id: str, region: str, actor_id: str, mcp_clie
         region: Región de AWS
         actor_id: ID del actor/cliente
         mcp_client: MCPClient que ya está dentro de un contexto activo
+        session_id: Session ID opcional para mantener contexto (si None, genera uno nuevo)
     
     Returns:
         tuple: (agente, session_id)
     """
-    session_id = str(uuid.uuid4())
+    if session_id is None:
+        session_id = str(uuid.uuid4())
     
     memory_config = AgentCoreMemoryConfig(
         memory_id=memory_id,
         session_id=session_id,
         actor_id=actor_id,
         retrieval_config={
+            # Recuperar más conversaciones previas para mantener contexto
+            "shopify/customer/{actorId}/interactions": RetrievalConfig(top_k=15, relevance_score=0.1),
+            # Recuperar preferencias del cliente
             "shopify/customer/{actorId}/preferences": RetrievalConfig(top_k=5, relevance_score=0.2),
-            "shopify/customer/{actorId}/interactions": RetrievalConfig(top_k=10, relevance_score=0.2)
         }
     )
     
