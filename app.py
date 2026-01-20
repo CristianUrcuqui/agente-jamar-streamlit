@@ -75,20 +75,37 @@ def get_device_id() -> str:
 
 def get_actor_id() -> str:
     """
-    Genera ID único para el usuario basado en su dispositivo/sesión.
+    Obtiene o genera un actor_id persistente para el usuario.
     
-    El mismo dispositivo/navegador tendrá el mismo actor_id mientras:
-    - Use el mismo navegador
-    - No cierre completamente el navegador (session_id persiste)
-    - No limpie las cookies/sesión
+    El mismo dispositivo/navegador mantendrá el mismo actor_id entre:
+    - Recargas de página ✅
+    - Cerrar y reabrir navegador ✅ (usando query_params en URL)
+    - Reinicios de Streamlit ✅
     
-    Esto permite mantener la conversación y memoria entre recargas de página.
+    Esto permite mantener el contexto y memoria de conversaciones.
     """
-    if "actor_id" not in st.session_state:
-        # Obtener ID basado en dispositivo/sesión
-        st.session_state.actor_id = get_device_id()
-        print(f"👤 Actor ID generado: {st.session_state.actor_id}")
-    return st.session_state.actor_id
+    # Primero intentar obtener de query_params (persiste en la URL)
+    query_params = st.query_params
+    if "actor_id" in query_params:
+        actor_id = query_params["actor_id"]
+        st.session_state.actor_id = actor_id
+        return actor_id
+    
+    # Si no está en query_params, verificar session_state
+    if "actor_id" in st.session_state:
+        actor_id = st.session_state.actor_id
+        # Guardar en query_params para persistencia
+        st.query_params["actor_id"] = actor_id
+        return actor_id
+    
+    # Si no existe, generar uno nuevo
+    actor_id = f"device_{uuid.uuid4().hex[:12]}"
+    st.session_state.actor_id = actor_id
+    # Guardar en query_params para persistencia entre sesiones
+    st.query_params["actor_id"] = actor_id
+    print(f"👤 Nuevo Actor ID generado: {actor_id}")
+    
+    return actor_id
 
 
 # ============================================================================
