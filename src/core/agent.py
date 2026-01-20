@@ -80,7 +80,10 @@ def create_agent(memory_id: str, region: str, actor_id: str = "customer_001", us
         try:
             # Si ya se proporcionó un cliente, usarlo
             if mcp_client is not None:
-                # El cliente ya está inicializado, solo obtener las tools
+                # El cliente ya está inicializado, obtener las tools dentro del contexto
+                # NOTA: El cliente debe mantenerse abierto durante toda la sesión
+                # Por ahora, inicializamos el cliente para obtener las tools
+                mcp_client.start()
                 gateway_tools = mcp_client.list_tools_sync()
                 tools_list.extend(gateway_tools)
                 print(f"✅ Gateway conectado exitosamente!")
@@ -122,15 +125,15 @@ def create_agent(memory_id: str, region: str, actor_id: str = "customer_001", us
                     )
                 )
                 
-                # Obtener tools dentro del contexto temporal
-                # El cliente se usará dentro del contexto cuando se ejecute el agente
-                with created_mcp_client:
-                    gateway_tools = created_mcp_client.list_tools_sync()
-                    tools_list.extend(gateway_tools)
-                    print(f"✅ Gateway conectado exitosamente!")
-                    print(f"   URL: {gateway_url}")
-                    print(f"   Tools disponibles: {len(gateway_tools)}")
-                # NOTA: El cliente se cerrará aquí, pero se volverá a abrir cuando se ejecute el agente dentro del contexto
+                # Inicializar el cliente para obtener las tools
+                # El cliente debe mantenerse abierto durante toda la sesión
+                created_mcp_client.start()
+                gateway_tools = created_mcp_client.list_tools_sync()
+                tools_list.extend(gateway_tools)
+                print(f"✅ Gateway conectado exitosamente!")
+                print(f"   URL: {gateway_url}")
+                print(f"   Tools disponibles: {len(gateway_tools)}")
+                # NOTA: El cliente se mantiene abierto - se cerrará cuando termine la sesión
         
         except Exception as e:
             print(f"⚠️ Error integrando Gateway: {e}")

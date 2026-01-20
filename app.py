@@ -158,8 +158,10 @@ def get_mcp_client(region: str):
                 )
             )
             
+            # Inicializar el cliente para que esté listo para usar
+            mcp_client.start()
             st.session_state.mcp_client = mcp_client
-            print(f"✅ MCPClient creado (se mantendrá abierto durante la ejecución)")
+            print(f"✅ MCPClient creado e inicializado (se mantendrá abierto durante la ejecución)")
             
         except Exception as e:
             print(f"⚠️ Error creando MCPClient: {e}")
