@@ -1,6 +1,6 @@
 [server]
-port = 8080
-address = "0.0.0.0"
+# Streamlit Cloud maneja el puerto automáticamente
+# No especificar port aquí para que funcione en Streamlit Cloud
 headless = true
 enableCORS = false
 enableXsrfProtection = false
