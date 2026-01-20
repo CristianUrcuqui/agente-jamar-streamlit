@@ -82,16 +82,50 @@ def create_agent(memory_id: str, region: str, actor_id: str = "customer_001", us
             if mcp_client is not None:
                 # Obtener las tools dentro del contexto (el cliente se inicializará automáticamente)
                 # NOTA: El cliente se cerrará después, pero se volverá a abrir cuando se ejecute el agente
-                with mcp_client:
-                    gateway_tools = mcp_client.list_tools_sync()
-                    tools_list.extend(gateway_tools)
-                    print(f"✅ Gateway conectado exitosamente!")
-                    print(f"   Tools disponibles: {len(gateway_tools)}")
-                    # Debug: Mostrar nombres de algunas tools
-                    if gateway_tools:
-                        tool_names = [getattr(t, 'name', str(t))[:50] for t in gateway_tools[:5]]
-                        print(f"   Primeras tools: {tool_names}")
-                # NOTA: El cliente se cerrará aquí, pero se volverá a abrir cuando se ejecute el agente dentro del contexto
+                # IMPORTANTE: El MCPClient DEBE estar dentro de un contexto 'with' para usar list_tools_sync()
+                print(f"🔧 Obteniendo tools del Gateway (cliente proporcionado)...")
+                try:
+                    # Intentar usar el cliente dentro de un contexto
+                    with mcp_client:
+                        gateway_tools = mcp_client.list_tools_sync()
+                        tools_list.extend(gateway_tools)
+                        print(f"✅ Gateway conectado exitosamente!")
+                        print(f"   Tools disponibles: {len(gateway_tools)}")
+                        # Debug: Mostrar nombres de algunas tools
+                        if gateway_tools:
+                            tool_names = [getattr(t, 'name', str(t))[:50] for t in gateway_tools[:5]]
+                            print(f"   Primeras tools: {tool_names}")
+                except Exception as ctx_error:
+                    error_msg = str(ctx_error)
+                    if "not running" in error_msg.lower() or "session" in error_msg.lower():
+                        print(f"⚠️ MCPClient necesita estar en contexto. Creando nuevo cliente temporal...")
+                        # Crear un cliente temporal solo para obtener las tools
+                        from strands.tools.mcp import MCPClient
+                        from mcp.client.streamable_http import streamablehttp_client
+                        import sys
+                        import os
+                        gateway_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "gateway")
+                        if gateway_path not in sys.path:
+                            sys.path.insert(0, gateway_path)
+                        from utils import get_ssm_parameter, get_cognito_token
+                        
+                        gateway_url = get_ssm_parameter("/jamar/agentcore/gateway_url", region)
+                        client_id = get_ssm_parameter("/jamar/agentcore/cognito_client_id", region)
+                        pool_id = get_ssm_parameter("/jamar/agentcore/cognito_pool_id", region)
+                        bearer_token = get_cognito_token(client_id, pool_id, region)
+                        
+                        temp_client = MCPClient(
+                            lambda: streamablehttp_client(
+                                gateway_url,
+                                headers={"Authorization": f"Bearer {bearer_token}"},
+                            )
+                        )
+                        with temp_client:
+                            gateway_tools = temp_client.list_tools_sync()
+                            tools_list.extend(gateway_tools)
+                            print(f"✅ Gateway conectado exitosamente (cliente temporal)!")
+                            print(f"   Tools disponibles: {len(gateway_tools)}")
+                # NOTA: El cliente original se usará cuando se ejecute el agente dentro del contexto
             else:
                 # Crear nuevo cliente
                 from strands.tools.mcp import MCPClient
