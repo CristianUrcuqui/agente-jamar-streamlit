@@ -54,6 +54,77 @@ def get_tool_name(tool):
     return None
 
 
+def create_agent_in_context(memory_id: str, region: str, actor_id: str, mcp_client):
+    """
+    Crea el agente DENTRO de un contexto MCPClient activo.
+    IMPORTANTE: Esta función DEBE llamarse dentro de un bloque 'with mcp_client:'
+    
+    Args:
+        memory_id: ID de la memoria AgentCore
+        region: Región de AWS
+        actor_id: ID del actor/cliente
+        mcp_client: MCPClient que ya está dentro de un contexto activo
+    
+    Returns:
+        tuple: (agente, session_id)
+    """
+    session_id = str(uuid.uuid4())
+    
+    memory_config = AgentCoreMemoryConfig(
+        memory_id=memory_id,
+        session_id=session_id,
+        actor_id=actor_id,
+        retrieval_config={
+            "shopify/customer/{actorId}/preferences": RetrievalConfig(top_k=5, relevance_score=0.2),
+            "shopify/customer/{actorId}/interactions": RetrievalConfig(top_k=10, relevance_score=0.2)
+        }
+    )
+    
+    model = BedrockModel(
+        model_id=DEFAULT_MODEL_ID,
+        temperature=DEFAULT_TEMPERATURE,
+        region_name=region,
+    )
+    
+    session_manager = AgentCoreMemorySessionManager(memory_config, region)
+    
+    # Obtener tools del Gateway (ya estamos dentro del contexto)
+    print(f"🔧 Obteniendo tools del Gateway...")
+    gateway_tools = mcp_client.list_tools_sync()
+    print(f"✅ Tools obtenidas: {len(gateway_tools)}")
+    
+    # Mostrar nombres de tools
+    tool_names = []
+    for t in gateway_tools[:10]:
+        name = get_tool_name(t) or "Unknown"
+        tool_names.append(name)
+    print(f"   Primeras 10 tools: {tool_names}")
+    
+    # Verificar buscar_productos
+    buscar_productos_found = False
+    for t in gateway_tools:
+        name = get_tool_name(t)
+        if name and name.lower() == 'buscar_productos':
+            buscar_productos_found = True
+            break
+    if buscar_productos_found:
+        print(f"   ✅ Tool 'buscar_productos' encontrada")
+    else:
+        print(f"   ⚠️ Tool 'buscar_productos' NO encontrada")
+    
+    # Crear agente con las tools del Gateway
+    print(f"🔧 Creando agente con {len(gateway_tools)} tools...")
+    agente = Agent(
+        model=model,
+        session_manager=session_manager,
+        tools=gateway_tools,
+        system_prompt=SYSTEM_PROMPT,
+    )
+    print(f"✅ Agente creado exitosamente")
+    
+    return agente, session_id
+
+
 def create_agent(memory_id: str, region: str, actor_id: str = "customer_001", use_gateway: bool = True, mcp_client=None):
     """
     Crea el agente de ventas con memoria.

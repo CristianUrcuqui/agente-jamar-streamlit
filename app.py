@@ -237,27 +237,35 @@ def get_mcp_client(region: str):
     return st.session_state.get("mcp_client")
 
 
-def get_agent(actor_id: str):
-    """Obtiene o crea el agente usando AgentCore Gateway."""
-    # NOTA: No necesitamos cliente Shopify aquí - las tools están en Lambda/Gateway
+def run_agent_with_gateway(prompt: str, actor_id: str):
+    """
+    Ejecuta el agente dentro del contexto del MCPClient.
+    IMPORTANTE: El agente DEBE crearse Y ejecutarse dentro del mismo contexto with mcp_client
+    para que las tools del Gateway funcionen correctamente.
+    """
+    from src.core.agent import create_agent_in_context
     
-    if "agent" not in st.session_state:
-        from src.core.agent import create_agent
-        memory, region = init_memory()
-        
-        # Obtener o crear MCPClient
-        mcp_client = get_mcp_client(region)
-        
-        agent, session_id, _ = create_agent(
+    memory, region = init_memory()
+    mcp_client = get_mcp_client(region)
+    
+    if not mcp_client:
+        raise RuntimeError("MCPClient no disponible")
+    
+    # Crear y ejecutar agente dentro del mismo contexto
+    with mcp_client:
+        agent, session_id = create_agent_in_context(
             memory_id=memory["id"],
             region=region,
             actor_id=actor_id,
-            use_gateway=True,  # SIEMPRE usar Gateway (todas las tools vienen del Gateway)
             mcp_client=mcp_client
         )
-        st.session_state.agent = agent
-        st.session_state.session_id = session_id
-    return st.session_state.agent
+        
+        # Ejecutar el agente dentro del mismo contexto
+        print(f"🔧 Ejecutando agente con prompt: {prompt[:50]}...")
+        response = agent(prompt)
+        print(f"✅ Agente ejecutado exitosamente")
+        
+        return response, session_id
 
 
 def get_response_text(response) -> str:
@@ -426,24 +434,6 @@ def main():
         st.markdown("---")
         st.success("✅ AgentCore Gateway activo")
     
-    # Inicializar agente con Gateway
-    try:
-        # Mostrar info del Gateway antes de crear el agente
-        with st.spinner("Conectando al AgentCore Gateway..."):
-            import boto3
-            from gateway.utils import get_ssm_parameter
-            gateway_url = get_ssm_parameter("/jamar/agentcore/gateway_url", os.getenv("AWS_DEFAULT_REGION", "us-east-1"))
-
-        
-        agent = get_agent(actor_id)
-    except Exception as e:
-        st.error(f"Error inicializando: {e}")
-        st.info("Verifica tu archivo `.env` con las credenciales AWS y Shopify")
-        import traceback
-        with st.expander("Detalles del error"):
-            st.code(traceback.format_exc())
-        return
-    
     # Inicializar mensajes (vacío - sin bienvenida automática)
     if "messages" not in st.session_state:
         st.session_state.messages = []
@@ -464,175 +454,13 @@ def main():
         with st.chat_message("assistant", avatar="🛋️"):
             with st.spinner("Pensando..."):
                 try:
-                    # NOTA: No necesitamos cliente Shopify - las tools están en Lambda/Gateway
+                    # NUEVO: Usar run_agent_with_gateway que crea y ejecuta el agente
+                    # dentro del mismo contexto del MCPClient
+                    response, session_id = run_agent_with_gateway(prompt, actor_id)
+                    st.session_state.session_id = session_id
                     
-                    # Capturar stdout para obtener la respuesta completa
-                    import io
-                    import sys
-                    from contextlib import redirect_stdout
-                    
-                    captured_output = io.StringIO()
-                    
-                    # Crear callback para capturar respuesta
-                    capture = ResponseCapture()
-                    agent.callback_handler = capture
-                    
-                    # Capturar stdout mientras se ejecuta el agente
-                    # IMPORTANTE: El MCPClient debe estar dentro del contexto cuando se ejecutan las tools
-                    mcp_client = st.session_state.get("mcp_client")
-                    
-                    if not mcp_client:
-                        st.error("❌ Error: MCPClient no está disponible. No se pueden usar las tools del Gateway.")
-                        response_text = "Lo siento, hay un problema de conexión con el Gateway. Por favor recarga la página."
-                    else:
-                        try:
-                            with redirect_stdout(captured_output):
-                                # Ejecutar dentro del contexto del MCPClient para que las tools funcionen
-                                print(f"🔧 Iniciando ejecución del agente...")
-                                print(f"   MCPClient disponible: {mcp_client is not None}")
-                                
-                                # Verificar tools usando función del módulo agent
-                                from src.core.agent import get_tool_name
-                                
-                                tools_in_agent = None
-                                if hasattr(agent, 'tools'):
-                                    tools_in_agent = agent.tools
-                                elif hasattr(agent, '_tools'):
-                                    tools_in_agent = agent._tools
-                                
-                                if tools_in_agent:
-                                    print(f"   Tools en agente: {len(tools_in_agent)}")
-                                    tool_names = []
-                                    for t in tools_in_agent[:10]:
-                                        name = get_tool_name(t) or "Unknown"
-                                        tool_names.append(name[:30])
-                                    print(f"   Primeras 10 tools: {tool_names}")
-                                    
-                                    # Verificar buscar_productos
-                                    buscar_productos_found = False
-                                    for t in tools_in_agent:
-                                        name = get_tool_name(t)
-                                        if name and name.lower() == 'buscar_productos':
-                                            buscar_productos_found = True
-                                            break
-                                    if buscar_productos_found:
-                                        print(f"   ✅ Tool 'buscar_productos' DISPONIBLE")
-                                    else:
-                                        print(f"   ❌ Tool 'buscar_productos' NO DISPONIBLE")
-                                else:
-                                    print(f"   ⚠️ Agente no tiene tools accesibles")
-                                
-                                with mcp_client:
-                                    print(f"🔧 MCPClient activado, ejecutando agente...")
-                                    response = agent(prompt)
-                                    print(f"✅ Agente ejecutado exitosamente")
-                        except Exception as e:
-                            # NO ocultar errores - mostrar el error real para debugging
-                            error_msg = str(e)
-                            error_type = type(e).__name__
-                            import traceback
-                            error_trace = traceback.format_exc()
-                            
-                            print(f"❌ ERROR EJECUTANDO AGENTE:")
-                            print(f"   Tipo: {error_type}")
-                            print(f"   Mensaje: {error_msg}")
-                            print(f"   Traceback:")
-                            print(error_trace)
-                            
-                            # Guardar error
-                            st.session_state.last_error = {
-                                "error": error_msg,
-                                "error_type": error_type,
-                                "traceback": error_trace,
-                                "prompt": prompt
-                            }
-                            
-                            # MOSTRAR EL ERROR REAL al usuario para debugging
-                            response_text = f"❌ Error: {error_type}\n\n{error_msg}\n\nPor favor revisa los logs o contacta con un asesor."
-                            
-                            # Mostrar error de forma visible
-                            st.error(f"❌ Error: {error_type}")
-                            st.error(f"**Mensaje:** {error_msg}")
-                            with st.expander("🔍 Traceback completo"):
-                                st.code(error_trace)
-                            
-                            st.session_state.messages.append({"role": "assistant", "content": response_text})
-                            st.rerun()
-                            return
-                    
-                    # Obtener el output capturado
-                    stdout_text = captured_output.getvalue()
-                    
-                    # Debug: Mostrar información sobre tools disponibles
-                    from src.core.agent import get_tool_name
-                    tools_in_agent = None
-                    if hasattr(agent, 'tools'):
-                        tools_in_agent = agent.tools
-                    elif hasattr(agent, '_tools'):
-                        tools_in_agent = agent._tools
-                    
-                    if tools_in_agent:
-                        print(f"📋 Tools disponibles en agente después de ejecutar: {len(tools_in_agent)}")
-                        tool_names = []
-                        for t in tools_in_agent[:5]:
-                            name = get_tool_name(t) or "Unknown"
-                            tool_names.append(name)
-                        print(f"   Primeras tools: {tool_names}")
-                    
-                    # Intentar obtener texto de la respuesta
+                    # Obtener texto de la respuesta
                     response_text = get_response_text(response)
-                    
-                    # Si está vacío, usar el texto capturado del stdout
-                    if not response_text or response_text.strip() == "":
-                        # Limpiar el texto del stdout (remover mensajes de tools)
-                        lines = stdout_text.split('\n')
-                        clean_lines = []
-                        skip_next = False
-                        for line in lines:
-                            if 'Tool #' in line or '🔧 Usando:' in line or '=== TOOL RESULTS ===' in line:
-                                skip_next = True
-                                continue
-                            if skip_next and line.strip() == '':
-                                skip_next = False
-                                continue
-                            if not skip_next and line.strip() and not line.startswith('No tiene'):
-                                clean_lines.append(line)
-                        response_text = '\n'.join(clean_lines).strip()
-                    
-                    # Si aún está vacío, usar el callback
-                    if not response_text or response_text.strip() == "":
-                        response_text = capture.get_text()
-                    
-                    # Si aún está vacío, buscar en la respuesta completa del agente
-                    if not response_text or response_text.strip() == "":
-                        # Intentar obtener del response directamente
-                        if hasattr(response, '__dict__'):
-                            response_dict = response.__dict__
-                            # Buscar en diferentes campos posibles
-                            for key in ['content', 'text', 'message', 'output']:
-                                if key in response_dict:
-                                    value = response_dict[key]
-                                    if isinstance(value, str) and value.strip():
-                                        response_text = value
-                                        break
-                                    elif isinstance(value, (list, dict)):
-                                        response_text = str(value)
-                                        break
-                    
-                    # Si aún está vacío, mensaje de error con debug
-                    if not response_text or response_text.strip() == "":
-                        # Debug: mostrar qué hay en la respuesta
-                        debug_info = f"Debug - Response type: {type(response)}\n"
-                        if hasattr(response, '__dict__'):
-                            debug_info += f"Response keys: {list(response.__dict__.keys())}\n"
-                        debug_info += f"Stdout length: {len(stdout_text)}\n"
-                        debug_info += f"Callback text: {capture.get_text()[:100]}\n"
-                        
-                        # Intentar usar el stdout completo como último recurso
-                        if stdout_text and len(stdout_text.strip()) > 10:
-                            response_text = stdout_text.strip()
-                        else:
-                            response_text = "Lo siento, hubo un problema procesando tu solicitud. Por favor intenta de nuevo."
                     
                     # Si no hay respuesta, mostrar mensaje de error
                     if not response_text or response_text.strip() == "":
