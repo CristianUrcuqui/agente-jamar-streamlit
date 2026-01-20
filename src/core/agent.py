@@ -36,6 +36,24 @@ class StreamingCallback:
             self.tool_name = None
 
 
+def get_tool_name(tool):
+    """Extrae el nombre real de una tool, intentando diferentes métodos."""
+    if hasattr(tool, 'name'):
+        name = getattr(tool, 'name', None)
+        if name:
+            return name
+    if hasattr(tool, 'function') and hasattr(tool.function, 'name'):
+        return tool.function.name
+    if hasattr(tool, '__name__'):
+        return tool.__name__
+    # Intentar acceder a atributos internos de MCPAgentTool
+    if hasattr(tool, '_tool_name'):
+        return tool._tool_name
+    if hasattr(tool, 'tool_name'):
+        return tool.tool_name
+    return None
+
+
 def create_agent(memory_id: str, region: str, actor_id: str = "customer_001", use_gateway: bool = True, mcp_client=None):
     """
     Crea el agente de ventas con memoria.
@@ -199,8 +217,23 @@ def create_agent(memory_id: str, region: str, actor_id: str = "customer_001", us
                     print(f"   Tools disponibles: {len(gateway_tools)}")
                     # Debug: Mostrar nombres de algunas tools
                     if gateway_tools:
-                        tool_names = [getattr(t, 'name', str(t))[:50] for t in gateway_tools[:5]]
-                        print(f"   Primeras tools: {tool_names}")
+                        tool_names = []
+                        for t in gateway_tools[:10]:
+                            name = get_tool_name(t) or "Unknown"
+                            tool_names.append(name[:50])
+                        print(f"   Primeras 10 tools: {tool_names}")
+                        
+                        # Verificar específicamente buscar_productos
+                        buscar_productos_found = False
+                        for t in gateway_tools:
+                            name = get_tool_name(t)
+                            if name and name.lower() == 'buscar_productos':
+                                buscar_productos_found = True
+                                break
+                        if buscar_productos_found:
+                            print(f"   ✅ Tool 'buscar_productos' encontrada en Gateway")
+                        else:
+                            print(f"   ⚠️ Tool 'buscar_productos' NO encontrada en Gateway")
                 # NOTA: El cliente se cerrará aquí, pero se volverá a abrir cuando se ejecute el agente dentro del contexto
         
         except Exception as e:
@@ -215,14 +248,23 @@ def create_agent(memory_id: str, region: str, actor_id: str = "customer_001", us
     # Debug: Verificar tools antes de crear agente
     print(f"📦 Total de tools que se pasarán al agente: {len(tools_list)}")
     if tools_list:
-        tool_names_preview = [getattr(t, 'name', str(t))[:40] for t in tools_list[:10]]
+        tool_names_preview = []
+        for t in tools_list[:10]:
+            name = get_tool_name(t) or "Unknown"
+            tool_names_preview.append(name[:40])
         print(f"   Preview de tools: {tool_names_preview}")
+        
         # Verificar que hay tools importantes
-        tool_names_lower = [getattr(t, 'name', str(t)).lower() for t in tools_list]
+        tool_names_lower = []
+        for t in tools_list:
+            name = get_tool_name(t)
+            if name:
+                tool_names_lower.append(name.lower())
         if 'buscar_productos' in tool_names_lower:
             print(f"   ✅ Tool 'buscar_productos' encontrada")
         else:
             print(f"   ⚠️ Tool 'buscar_productos' NO encontrada en la lista")
+            print(f"   Tools disponibles: {tool_names_lower[:20]}")
     else:
         print(f"   ❌ ERROR: No hay tools disponibles!")
     
@@ -260,17 +302,9 @@ def create_agent(memory_id: str, region: str, actor_id: str = "customer_001", us
             try:
                 agent_tool_names = []
                 for t in tools_in_agent[:50]:  # Limitar a 50 para no saturar logs
-                    tool_name = None
-                    if hasattr(t, 'name'):
-                        tool_name = getattr(t, 'name', '').lower()
-                    elif hasattr(t, 'function') and hasattr(t.function, 'name'):
-                        tool_name = t.function.name.lower()
-                    elif hasattr(t, '__name__'):
-                        tool_name = t.__name__.lower()
-                    elif isinstance(t, str):
-                        tool_name = t.lower()
+                    tool_name = get_tool_name(t)
                     if tool_name:
-                        agent_tool_names.append(tool_name)
+                        agent_tool_names.append(tool_name.lower())
                 
                 if 'buscar_productos' in agent_tool_names:
                     print(f"   ✅ Tool 'buscar_productos' está disponible en el agente")
