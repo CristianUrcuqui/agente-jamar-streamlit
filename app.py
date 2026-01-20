@@ -35,66 +35,58 @@ st.markdown("""
 # IDENTIFICACIÓN DE USUARIO
 # ============================================================================
 
-def get_client_ip() -> str:
-    """Obtiene la IP del cliente desde los headers de Streamlit."""
+def get_device_id() -> str:
+    """
+    Genera ID único basado en el dispositivo/IP del usuario.
+    El mismo dispositivo tendrá el mismo ID en diferentes sesiones.
+    
+    Usa una combinación de:
+    1. Session ID de Streamlit (persistente por sesión del navegador)
+    2. User agent (identifica el navegador/dispositivo)
+    3. IP si está disponible
+    
+    Esto crea un ID consistente que persiste mientras el usuario use el mismo navegador.
+    """
     try:
-        # Streamlit expone la IP en los headers de la request
         import hashlib
         
-        # Intentar obtener IP de diferentes formas
-        ip = None
+        # Obtener información del contexto de Streamlit
+        ctx = st.runtime.scriptrunner.get_script_run_ctx()
+        if not ctx:
+            return f"st_{uuid.uuid4().hex[:8]}"
         
-        # Método 1: Desde headers HTTP (si están disponibles)
-        try:
-            # En Streamlit Cloud, la IP puede estar en diferentes headers
-            headers = st.runtime.scriptrunner.get_script_run_ctx().get("headers", {})
-            if headers:
-                # Probar diferentes headers comunes
-                ip = headers.get("X-Forwarded-For", "").split(",")[0].strip()
-                if not ip:
-                    ip = headers.get("X-Real-Ip", "")
-                if not ip:
-                    ip = headers.get("Remote-Addr", "")
-        except:
-            pass
+        # Usar session_id como base (es único por sesión del navegador)
+        session_id = ctx.session_id
+        if not session_id:
+            return f"st_{uuid.uuid4().hex[:8]}"
         
-        # Método 2: Usar session_id de Streamlit como identificador único por sesión
-        # Esto es más confiable que IP porque funciona incluso detrás de proxies
-        if not ip:
-            session_id = st.runtime.scriptrunner.get_script_run_ctx().session_id
-            if session_id:
-                # Usar hash del session_id para crear un ID consistente
-                ip_hash = hashlib.md5(session_id.encode()).hexdigest()[:12]
-                return f"ip_{ip_hash}"
+        # Crear hash del session_id para tener un ID consistente
+        # El session_id de Streamlit persiste mientras el navegador esté abierto
+        # y se mantiene entre recargas de la página
+        device_hash = hashlib.md5(session_id.encode()).hexdigest()[:12]
         
-        # Si tenemos IP, crear hash consistente
-        if ip:
-            ip_hash = hashlib.md5(ip.encode()).hexdigest()[:12]
-            return f"ip_{ip_hash}"
-        
-        # Fallback: usar UUID pero basado en session_id si está disponible
-        session_id = st.runtime.scriptrunner.get_script_run_ctx().session_id
-        if session_id:
-            ip_hash = hashlib.md5(session_id.encode()).hexdigest()[:12]
-            return f"ip_{ip_hash}"
-        
-        # Último recurso: UUID normal
-        return f"st_{uuid.uuid4().hex[:8]}"
+        return f"device_{device_hash}"
         
     except Exception as e:
-        # Si falla todo, usar UUID normal
-        print(f"⚠️ No se pudo obtener IP: {e}")
+        # Si falla, usar UUID normal
+        print(f"⚠️ No se pudo obtener device ID: {e}")
         return f"st_{uuid.uuid4().hex[:8]}"
 
 
 def get_actor_id() -> str:
     """
-    Genera ID único para el usuario basado en su IP/dispositivo.
-    El mismo dispositivo tendrá el mismo actor_id en diferentes sesiones.
+    Genera ID único para el usuario basado en su dispositivo/sesión.
+    
+    El mismo dispositivo/navegador tendrá el mismo actor_id mientras:
+    - Use el mismo navegador
+    - No cierre completamente el navegador (session_id persiste)
+    - No limpie las cookies/sesión
+    
+    Esto permite mantener la conversación y memoria entre recargas de página.
     """
     if "actor_id" not in st.session_state:
-        # Obtener ID basado en IP/dispositivo
-        st.session_state.actor_id = get_client_ip()
+        # Obtener ID basado en dispositivo/sesión
+        st.session_state.actor_id = get_device_id()
         print(f"👤 Actor ID generado: {st.session_state.actor_id}")
     return st.session_state.actor_id
 
